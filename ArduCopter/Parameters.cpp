@@ -731,13 +731,13 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Param: THROW_TRIG_SRC
     // @DisplayName: Throw trigger source
     // @Description: Select source used to detect the throw trigger. 0 or 1
-    // @Values: 0:Source0,1:Source1
+    // @Values: 0:speed ,1:alt
     // @User: Standard
     AP_GROUPINFO("THROW_TRIG_SRC", 11, ParametersG2, throw_trig_src, 0),
 
     // @Param: THROW_TRIG_VEL
     // @DisplayName: Throw horizontal trigger speed
-    // @Description: Custom horizontal speed threshold in cm/s used to detect a throw when THROW_TRIG_SRC is set to velocity mode (0). If set to a value greater than the default it will be used; otherwise the default is used.
+    // @Description: Custom horizontal speed threshold in cm/s used to detect a throw when THROW_TRIG_SRC is set to velocity mode (0).
     // @Units: cm/s
     // @Range: 10 2000
     // @User: Advanced
@@ -745,7 +745,7 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
 
     // @Param: THROW_TRIG_VELZ
     // @DisplayName: Throw vertical trigger speed
-    // @Description: Custom vertical speed threshold in cm/s used to detect a throw when THROW_TRIG_SRC is set to velocity mode (0). If set to a value greater than the default it will be used; otherwise the default is used.
+    // @Description: Custom vertical speed threshold in cm/s used to detect a throw when THROW_TRIG_SRC is set to velocity mode (0). 
     // @Units: cm/s
     // @Range: 10 2000
     // @User: Advanced
@@ -1238,11 +1238,11 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
     // @Param: THROW_TRIG_Z
     // @DisplayName: Throw altitude trigger (meters)
     // @Description: When THROW_TRIG_SRC is set to altitude (1) this value defines the drop distance in meters
-    // from detection-start altitude that will trigger uprighting. Values below 1.0 are treated as the default.
+    // from detection-start altitude that will trigger uprighting. 
     // @Units: m
-    // @Range: 1 100
+    // @Range: 0.1 max_ap_float
     // @User: Advanced
-    AP_GROUPINFO("THROW_TRIG_Z", 11, ParametersG2, throw_trig_z, 4.0),
+    AP_GROUPINFO("THROW_TRIG_Z", 11, ParametersG2, throw_trig_z, 3.0),
 
     AP_GROUPEND
 };

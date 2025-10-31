@@ -513,10 +513,10 @@ public:
     // Throw mode parameters
     AP_Int8 throw_nextmode;
     AP_Enum<ModeThrow::ThrowType> throw_type;
-    AP_Int8 throw_trig_src; // throw trigger source (0 or 1)
-    AP_Int16 throw_trig_vel; // custom horizontal trigger speed in cm/s (0 to use default)
-    AP_Int16 throw_trig_vert_vel; // custom vertical trigger speed in cm/s (0 to use default)
-    AP_Float throw_trig_z; // custom vertical drop threshold in meters (0 to use default / disabled)
+    AP_Int8 throw_trig_src; // throw trigger source (0:speed or 1:alt)
+    AP_Int16 throw_trig_vel; // custom trigger speed in cm/s
+    AP_Int16 throw_trig_vert_vel; // custom vertical trigger speed in cm/s 
+    AP_Float throw_trig_z; // custom vertical drop threshold in meters 
 #endif
 
     // ground effect compensation enable/disable
