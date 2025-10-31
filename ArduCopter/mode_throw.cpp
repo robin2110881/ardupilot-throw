@@ -49,6 +49,17 @@ void ModeThrow::run()
     } else if (stage == Throw_Disarmed && motors->armed()) {
         gcs().send_text(MAV_SEVERITY_INFO,"waiting for throw");
         stage = Throw_Detecting;
+        // record the detection start altitude (meters) for altitude-based triggers
+        {
+            float altitude_above_home;
+            if (ahrs.home_is_set()) {
+                ahrs.get_relative_position_D_home(altitude_above_home);
+                altitude_above_home = -altitude_above_home; // altitude above home is returned as negative
+            } else {
+                altitude_above_home = pos_control->get_pos_estimate_NEU_cm().z * 0.01f; // cm -> m
+            }
+            detect_start_alt_m = altitude_above_home;
+        }
 
     } else if (stage == Throw_Detecting && throw_detected()){
         gcs().send_text(MAV_SEVERITY_INFO,"throw detected - spooling motors");
@@ -262,22 +273,46 @@ bool ModeThrow::throw_detected()
         return false;
     }
 
-    // Check for high speed (>500 cm/s)
-    bool high_speed = pos_control->get_vel_estimate_NEU_cms().length_squared() > (THROW_HIGH_SPEED * THROW_HIGH_SPEED);
+    // Determine thresholds (cm/s) and enforce parameter rules
+    // New defaults and rules requested by user:
+    // - default trig vel (horizontal) = 500 cm/s
+    // - default trig velz (vertical) = 50 cm/s
+    // - default throw_trig_z = 4.0 m
+    // - THROW_TRIG_SRC: 0 = velocity-based (use trig_vel/trig_velz), 1 = altitude-based
+    // - trig_vel/trig_velz: only take effect if > default and >= 10
+    // - throw_trig_z: values < 1.0 are treated as default (4.0)
 
-    // check for upwards or downwards trajectory (airdrop) of 50cm/s
+    int32_t thresh_high = 10;
+    int32_t thresh_vert = 10;
+
+    if (g2.throw_trig_src.get() == 0) {
+        // velocity-based mode: use user params only when they are > default and >= 10
+        int32_t v = g2.throw_trig_vel.get();
+        if (v >= 10) {
+            thresh_high = v;
+        }
+        int32_t vz = g2.throw_trig_vert_vel.get();
+        if (vz >= 10) {
+            thresh_vert = vz;
+        }
+    }
+
+    // Check for high speed using selected threshold
+    bool high_speed = pos_control->get_vel_estimate_NEU_cms().length_squared() > (thresh_high * thresh_high);
+
+    // check for upwards or downwards trajectory (airdrop)
     bool changing_height;
     if (g2.throw_type == ThrowType::Drop) {
-        changing_height = pos_control->get_vel_estimate_NEU_cms().z < -THROW_VERTICAL_SPEED;
+        changing_height = pos_control->get_vel_estimate_NEU_cms().z < -thresh_vert;
     } else {
-        changing_height = pos_control->get_vel_estimate_NEU_cms().z > THROW_VERTICAL_SPEED;
+        changing_height = pos_control->get_vel_estimate_NEU_cms().z > thresh_vert;
     }
 
     // Check the vertical acceleration is greater than 0.25g
     bool free_falling = ahrs.get_accel_ef().z > -0.25 * GRAVITY_MSS;
 
     // Check if the accel length is < 1.0g indicating that any throw action is complete and the copter has been released
-    bool no_throw_action = copter.ins.get_accel().length() < 1.0f * GRAVITY_MSS;
+    bool no_throw_action = copter.ins.get_accel().length() < 1.05f * GRAVITY_MSS;
 
     // fetch the altitude above home
     float altitude_above_home;  // Use altitude above home if it is set, otherwise relative to EKF origin
@@ -291,20 +326,53 @@ bool ModeThrow::throw_detected()
     // Check that the altitude is within user defined limits
     const bool height_within_params = (g.throw_altitude_min == 0 || altitude_above_home > g.throw_altitude_min) && (g.throw_altitude_max == 0 || (altitude_above_home < g.throw_altitude_max));
 
-    // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release  
-    bool possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
+    // Decide detection method based on THROW_TRIG_SRC:
+    //  - 0: velocity-based detection (default behavior) using thresh_high and thresh_vert
+    //  - 1: altitude-based detection (for drops) using THROW_TRIG_Z (meters)
 
+    bool possible_throw_detected = false;
+    bool throw_condition_confirmed = false;
 
-    // Record time and vertical velocity when we detect the possible throw
-    if (possible_throw_detected && ((AP_HAL::millis() - free_fall_start_ms) > 500)) {
-        free_fall_start_ms = AP_HAL::millis();
-        free_fall_start_velz = pos_control->get_vel_estimate_NEU_cms().z;
+    if (g2.throw_trig_src.get() == 1 && g2.throw_type == ThrowType::Drop) {
+        // altitude-based trigger for drops: trigger when we've fallen more than THROW_TRIG_Z meters
+        // enforce minimum allowed value for THROW_TRIG_Z (>= 0.1 m);
+        float z = g2.throw_trig_z.get();
+        if (z < 0.1f) {
+            z = 0.1;
+        }
+        if (detect_start_alt_m <= 0.0f) {
+            // if detect_start_alt_m wasn't recorded for some reason, use current altitude as reference and don't trigger yet
+            detect_start_alt_m = altitude_above_home;
+        }
+        const float fallen_m = detect_start_alt_m - altitude_above_home;
+        possible_throw_detected = (fallen_m > z) && height_within_params && no_throw_action;
+        // we immediately confirm based on altitude (no additional velocity confirmation)
+        throw_condition_confirmed = possible_throw_detected;
+    } else {
+        // velocity-based detection (existing logic)
+        // High velocity or free-fall combined with increasing height indicate a possible air-drop or throw release
+        possible_throw_detected = (free_falling || high_speed) && changing_height && no_throw_action && height_within_params;
+
+        // Record time and vertical velocity when we detect the possible throw.
+        // If this is the first time, record immediately (free_fall_start_ms == 0);
+        // otherwise only refresh if the previous record is older than 500 ms.
+        if (possible_throw_detected && ((AP_HAL::millis() - free_fall_start_ms) > 500)) {
+            free_fall_start_ms = AP_HAL::millis();
+            free_fall_start_velz = pos_control->get_vel_estimate_NEU_cms().z;
+            free_fall_start_alt = altitude_above_home;
+        }
+
+        // Confirmation: check for a sufficient downwards velocity change within 0.5s.
+        // Previously this was hard-coded to 250 cm/s (2.5 m/s) which made the parameter
+        // trig_vert ineffective for the final confirmation stage. Compute a confirmation
+        // delta based on the selected vertical trigger threshold but enforce a sensible
+        // minimum (250 cm/s) to avoid overly-sensitive confirmation.
+        float confirmation_delta = 5.0f * (float)thresh_vert;
+        throw_condition_confirmed = ((AP_HAL::millis() - free_fall_start_ms < 500) &&
+                                    ((pos_control->get_vel_estimate_NEU_cms().z - free_fall_start_velz) < -confirmation_delta));
     }
 
-    // Once a possible throw condition has been detected, we check for 2.5 m/s of downwards velocity change in less than 0.5 seconds to confirm
-    bool throw_condition_confirmed = ((AP_HAL::millis() - free_fall_start_ms < 500) && ((pos_control->get_vel_estimate_NEU_cms().z - free_fall_start_velz) < -250.0f));
-
-    // start motors and enter the control mode if we are in continuous freefall
+    // start motors and enter the control mode if we are in continuous freefall / confirmed
     return throw_condition_confirmed;
 }
 

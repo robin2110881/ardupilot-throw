@@ -1832,6 +1832,8 @@ private:
     bool nextmode_attempted;
     uint32_t free_fall_start_ms;    // system time free fall was detected
     float free_fall_start_velz;     // vertical velocity when free fall was detected
+    float free_fall_start_alt;      // altitude (m) when free fall was detected
+    float detect_start_alt_m = 0.0f; // altitude (m) at start of detecting stage
 };
 
 #if MODE_TURTLE_ENABLED

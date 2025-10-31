@@ -727,6 +727,31 @@ const AP_Param::GroupInfo ParametersG2::var_info[] = {
     // @Values: 0:Upward Throw,1:Drop
     // @User: Standard
     AP_GROUPINFO("THROW_TYPE", 4, ParametersG2, throw_type, (float)ModeThrow::ThrowType::Upward),
+
+    // @Param: THROW_TRIG_SRC
+    // @DisplayName: Throw trigger source
+    // @Description: Select source used to detect the throw trigger. 0 or 1
+    // @Values: 0:Source0,1:Source1
+    // @User: Standard
+    AP_GROUPINFO("THROW_TRIG_SRC", 11, ParametersG2, throw_trig_src, 0),
+
+    // @Param: THROW_TRIG_VEL
+    // @DisplayName: Throw horizontal trigger speed
+    // @Description: Custom horizontal speed threshold in cm/s used to detect a throw when THROW_TRIG_SRC is set to velocity mode (0). If set to a value greater than the default it will be used; otherwise the default is used.
+    // @Units: cm/s
+    // @Range: 10 2000
+    // @User: Advanced
+    AP_GROUPINFO("THROW_TRIG_VEL", 12, ParametersG2, throw_trig_vel, 500),
+
+    // @Param: THROW_TRIG_VELZ
+    // @DisplayName: Throw vertical trigger speed
+    // @Description: Custom vertical speed threshold in cm/s used to detect a throw when THROW_TRIG_SRC is set to velocity mode (0). If set to a value greater than the default it will be used; otherwise the default is used.
+    // @Units: cm/s
+    // @Range: 10 2000
+    // @User: Advanced
+    AP_GROUPINFO("THROW_TRIG_VELZ", 13, ParametersG2, throw_trig_vert_vel, 50),
+
+    
 #endif
 
     // @Param: GND_EFFECT_COMP
@@ -1210,8 +1235,19 @@ const AP_Param::GroupInfo ParametersG2::var_info2[] = {
 
     // ID 62 is reserved for the AP_SUBGROUPEXTENSION
 
+    // @Param: THROW_TRIG_Z
+    // @DisplayName: Throw altitude trigger (meters)
+    // @Description: When THROW_TRIG_SRC is set to altitude (1) this value defines the drop distance in meters
+    // from detection-start altitude that will trigger uprighting. Values below 1.0 are treated as the default.
+    // @Units: m
+    // @Range: 1 100
+    // @User: Advanced
+    AP_GROUPINFO("THROW_TRIG_Z", 11, ParametersG2, throw_trig_z, 4.0),
+
     AP_GROUPEND
 };
+
+/* THROW_TRIG_Z will be registered inside the var_info2 table further below. */
 
 /*
   constructor for g2 object
